@@ -1,0 +1,63 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sqlite-web"
+dynamic = ["version"]
+description = "Web-based SQLite database browser"
+readme = "README.md"
+license = {text = "MIT"}
+authors = [
+    {name = "Charles Leifer", email = "coleifer@gmail.com"}
+]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Environment :: Web Environment",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9", 
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Database",
+    "Topic :: Internet :: WWW/HTTP :: Dynamic Content",
+]
+requires-python = ">=3.8"
+dependencies = [
+    "flask>=2.0.0",
+    "peewee>=3.15.0",
+    "pygments>=2.10.0",
+    "markupsafe>=2.0.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/coleifer/sqlite-web"
+Repository = "https://github.com/coleifer/sqlite-web"
+Issues = "https://github.com/coleifer/sqlite-web/issues"
+
+[project.scripts]
+sqlite_web = "sqlite_web.sqlite_web:main"
+
+[tool.setuptools.dynamic]
+version = {attr = "sqlite_web.sqlite_web.__version__"}
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["sqlite_web*"]
+
+[tool.setuptools.package-data]
+sqlite_web = ["static/*/*", "templates/*"]
+
+[tool.uv]
+dev-dependencies = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "black>=23.0.0",
+    "isort>=5.12.0",
+    "flake8>=6.0.0",
+    "mypy>=1.0.0",
+]

@@ -1,4 +1,4 @@
-FROM python:3.10-alpine
+FROM python:3.13-alpine
 
 ENV CFLAGS="-DSQLITE_DEFAULT_CACHE_SIZE=-8000 \
             -DSQLITE_DEFAULT_FOREIGN_KEYS=1 \
@@ -30,17 +30,27 @@ ENV CFLAGS="-DSQLITE_DEFAULT_CACHE_SIZE=-8000 \
             -DHAVE_USLEEP \
             -O2 -fPIC"
 
+# Install uv
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
+
+# Copy project files
+COPY pyproject.toml /app/
+COPY sqlite_web/ /app/sqlite_web/
+
 RUN apk add --no-cache --virtual .build-deps build-base libressl coreutils gcc libc-dev linux-headers make tar wget tcl tcl-dev dpkg dpkg-dev \
     && wget -q https://www.sqlite.org/src/tarball/sqlite.tar.gz?r=release -O sqlite.tar.gz \
     && tar xzf sqlite.tar.gz \
     && cd sqlite \
     && buildArch="$(dpkg-architecture --query DEB_BUILD_GNU_TYPE)" \
-    && LIBS="-lm" PREFIX="/usr/local" ./configure --build="$buildArch" --disable-tcl --enable-shared --enable-static --enable-tempstore=always --prefix="/usr/local" \
+    && LIBS="-lm" PREFIX="/usr/local" ./configure --build="$buildArch" --disable-tcl --enable-shared --enable-static --prefix="/usr/local" \
     && make -j$(nproc) \
     && make install \
     && cd .. \
     && rm -rf sqlite sqlite.tar.gz \
-    && pip install --no-cache-dir cython flask peewee sqlite-web \
+    && cd /app \
+    && uv pip install --system --no-cache . \
+    && cd / \
+    && rm -rf /app \
     && apk del .build-deps \
     && adduser -D -h /data appuser
 RUN mkdir -p /data && chown -R appuser:appuser /data
