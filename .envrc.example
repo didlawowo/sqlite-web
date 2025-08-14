@@ -1,0 +1,17 @@
+# Variables d'environnement pour sqlite-web
+# Copiez ce fichier vers .envrc et adaptez les valeurs selon vos besoins
+
+# Secret key pour les sessions Flask
+# Si non défini, une clé aléatoire sera générée automatiquement à chaque démarrage
+export SQLITE_WEB_SECRET_KEY="your-super-secret-key-here-minimum-32-chars"
+
+# Mot de passe pour l'accès à l'interface web (optionnel)
+# Si défini, l'accès à sqlite-web sera protégé par ce mot de passe
+export SQLITE_WEB_PASSWORD="your-password-here"
+
+# Configuration de logging (optionnel)
+export SQLITE_WEB_LOG_LEVEL="INFO"
+
+# Configuration Flask pour le développement (ne pas utiliser en production)
+export FLASK_ENV="development"
+export FLASK_DEBUG="1"

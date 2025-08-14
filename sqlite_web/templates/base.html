@@ -1,7 +1,7 @@
 <!doctype html>
 <html>
   <head>
-    <title>SQLite Web: {{ dataset.base_name }}</title>
+    <title>SQLite Pro - {{ dataset.base_name }}</title>
     <meta charset="utf-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -9,6 +9,7 @@
     <link rel=stylesheet type=text/css href="{{ url_for('static', filename='css/bootstrap.min.css') }}" />
     <link rel=stylesheet type=text/css href="{{ url_for('static', filename='css/sqlbrowse.css') }}" />
     <link rel=stylesheet type=text/css href="{{ url_for('static', filename='css/syntax-highlight.css') }}" />
+    <link rel=stylesheet type=text/css href="{{ url_for('static', filename='css/modern-theme.css') }}" />
     <style type="text/css">
       @media (max-width: 1200px) {
         h1 { font-size: 1.7rem; }
@@ -66,12 +67,9 @@
       </div>
       <div class="row">
         <div class="col-9 offset-3">
-          <footer>
-            <hr />
-            <p>
-              Web-based SQLite database browser <span>v{{ version }}</span>, powered by
-              <a href="http://flask.pocoo.org/">Flask</a> and <a href="http://docs.peewee-orm.com/">Peewee</a>.
-              &copy; {{ now.year }} <a href="http://charlesleifer.com/">Charles Leifer</a>
+          <footer class="mt-5 pt-4 border-top text-center text-muted">
+            <p class="mb-0">
+              <small>SQLite Pro</small>
             </p>
           </footer>
         </div>

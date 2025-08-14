@@ -11,6 +11,7 @@ import operator
 import optparse
 import os
 import re
+import secrets
 import sys
 import threading
 import time
@@ -22,22 +23,13 @@ from io import TextIOWrapper
 from logging.handlers import WatchedFileHandler
 from werkzeug.routing import BaseConverter
 
-# Py2k compat.
-if sys.version_info[0] == 2:
-    PY2 = True
-    binary_types = (buffer, bytes, bytearray)
-    decode_handler = 'replace'
-    numeric = (int, long, float)
-    unicode_type = unicode
-    from StringIO import StringIO
-else:
-    PY2 = False
-    binary_types = (bytes, bytearray)
-    decode_handler = 'backslashreplace'
-    numeric = (int, float)
-    unicode_type = str
-    from functools import reduce
-    from io import StringIO
+# Python 3 only
+binary_types = (bytes, bytearray)
+decode_handler = 'backslashreplace'
+numeric = (int, float)
+unicode_type = str
+from functools import reduce
+from io import StringIO
 
 try:
     from flask import (
@@ -51,6 +43,26 @@ try:
 except ImportError:
     raise RuntimeError('Unable to import markupsafe module. Install by running'
                        ' pip install markupsafe')
+
+try:
+    from flask_wtf.csrf import CSRFProtect
+    from flask_wtf import FlaskForm
+    from wtforms import HiddenField
+except ImportError:
+    import warnings
+    warnings.warn('flask-wtf library not found. CSRF protection disabled.', ImportWarning)
+    CSRFProtect = None
+    FlaskForm = None
+    HiddenField = None
+
+try:
+    from flask_limiter import Limiter
+    from flask_limiter.util import get_remote_address
+except ImportError:
+    import warnings
+    warnings.warn('flask-limiter library not found. Rate limiting disabled.', ImportWarning)
+    Limiter = None
+    get_remote_address = None
 
 try:
     from pygments import formatters, highlight, lexers
@@ -78,9 +90,12 @@ else:
                            'Please update by running pip install --update '
                            'peewee' % _pw_version)
 
-from peewee import *
-from peewee import IndexMetadata
-from peewee import sqlite3
+from peewee import (
+    AutoField, BlobField, BooleanField, CharField, CompositeKey, 
+    DateField, DateTimeField, DecimalField, FloatField, IndexMetadata, 
+    IntegerField, OperationalError, SqliteDatabase, TextField, TimeField,
+    sqlite3
+)
 from playhouse.dataset import DataSet
 from playhouse.migrate import migrate
 
@@ -90,13 +105,29 @@ DEBUG = False
 ROWS_PER_PAGE = 50
 QUERY_ROWS_PER_PAGE = 1000
 TRUNCATE_VALUES = True
-SECRET_KEY = 'sqlite-database-browser-0.1.0'
+# Generate a secure random secret key - can be overridden by environment variable
+SECRET_KEY = os.environ.get('SQLITE_WEB_SECRET_KEY') or secrets.token_hex(32)
 
 app = Flask(
     __name__,
     static_folder=os.path.join(CUR_DIR, 'static'),
     template_folder=os.path.join(CUR_DIR, 'templates'))
 app.config.from_object(__name__)
+
+# Initialize security extensions
+csrf = None
+limiter = None
+
+if CSRFProtect:
+    csrf = CSRFProtect(app)
+
+if Limiter and get_remote_address:
+    limiter = Limiter(
+        key_func=get_remote_address,
+        default_limits=["200 per day", "50 per hour"]
+    )
+    limiter.init_app(app)
+
 dataset = None
 migrator = None
 
@@ -107,6 +138,59 @@ migrator = None
 TriggerMetadata = namedtuple('TriggerMetadata', ('name', 'sql'))
 
 ViewMetadata = namedtuple('ViewMetadata', ('name', 'sql'))
+
+#
+# Security helpers.
+#
+
+def sanitize_sql_identifier(identifier):
+    """Sanitize SQL identifiers to prevent injection."""
+    if not identifier or not isinstance(identifier, str):
+        raise ValueError("Invalid identifier")
+    # Only allow alphanumeric, underscore, and basic chars
+    if not re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', identifier):
+        raise ValueError(f"Invalid SQL identifier: {identifier}")
+    return identifier
+
+def validate_and_wrap_subquery(sql):
+    """Validate and safely wrap a subquery for COUNT operations."""
+    if not sql or not isinstance(sql, str):
+        raise ValueError("Invalid SQL query")
+    
+    # Remove dangerous patterns
+    dangerous_patterns = [
+        r';\s*DROP\s+',
+        r';\s*DELETE\s+',
+        r';\s*UPDATE\s+',
+        r';\s*INSERT\s+',
+        r';\s*CREATE\s+',
+        r';\s*ALTER\s+',
+        r'--',
+        r'/\*',
+        r'\*/',
+    ]
+    
+    sql_upper = sql.upper()
+    for pattern in dangerous_patterns:
+        if re.search(pattern, sql_upper, re.IGNORECASE):
+            raise ValueError("Potentially dangerous SQL detected")
+    
+    # Clean and validate
+    cleaned_sql = sql.rstrip(' ;')
+    if not cleaned_sql:
+        raise ValueError("Empty SQL query")
+        
+    return cleaned_sql
+
+def validate_ordering_column(ordering_str):
+    """Validate ordering column index."""
+    try:
+        ordering = int(ordering_str)
+        if not (1 <= abs(ordering) <= 100):  # Reasonable column limit
+            raise ValueError("Column index out of range")
+        return ordering
+    except (ValueError, TypeError):
+        raise ValueError("Invalid ordering parameter")
 
 #
 # Database helpers.
@@ -229,7 +313,7 @@ class SqliteDataSet(DataSet):
             ('trigger', name))
         triggers = [t for t, in cursor.fetchall()]
         rgx = re.compile(r'CREATE\s+TRIGGER.+?\sINSTEAD\s+OF\s+'
-                         '(INSERT|UPDATE|DELETE)\s', re.I)
+                         r'(INSERT|UPDATE|DELETE)\s', re.I)
         operations = set()
         for trigger in triggers:
             operations.update([op.lower() for op in rgx.findall(trigger)])
@@ -258,6 +342,7 @@ def index():
     return render_template('index.html', sqlite=sqlite3)
 
 @app.route('/login/', methods=['GET', 'POST'])
+@limiter.limit("5 per minute") if limiter else lambda f: f
 def login():
     if request.method == 'POST':
         if request.form.get('password') == app.config['PASSWORD']:
@@ -292,10 +377,17 @@ def _query_view(template, table=None):
         export_format = None
 
     if ordering:
-        ordering = int(ordering)
-        direction = 'DESC' if ordering < 0 else 'ASC'
-        qsql = ('SELECT * FROM (%s) AS _ ORDER BY %d %s' %
-                (sql.rstrip(' ;'), abs(ordering), direction))
+        try:
+            ordering = validate_ordering_column(ordering)
+            direction = 'DESC' if ordering < 0 else 'ASC'
+            # Safely construct ORDER BY clause with validated parameters
+            cleaned_sql = validate_and_wrap_subquery(sql)
+            qsql = 'SELECT * FROM (%s) AS _ ORDER BY %d %s' % (
+                cleaned_sql, abs(ordering), direction)
+        except ValueError as e:
+            error = f"Invalid ordering parameter: {e}"
+            ordering = None
+            qsql = sql
     else:
         ordering = None
 
@@ -314,9 +406,12 @@ def _query_view(template, table=None):
             return export(query, export_format, table)
 
         try:
-            total, = dataset.query('SELECT COUNT(*) FROM (%s) as _' %
-                                   qsql.rstrip('; ')).fetchone()
-        except Exception as exc:
+            # Safely validate and wrap the subquery for COUNT
+            validated_qsql = validate_and_wrap_subquery(qsql)
+            count_query = 'SELECT COUNT(*) FROM (%s) as _' % validated_qsql
+            total, = dataset.query(count_query).fetchone()
+        except (Exception, ValueError) as exc:
+            app.logger.warning(f"Count query failed: {exc}")
             total = -1
 
         # Apply pagination.
@@ -338,18 +433,26 @@ def _query_view(template, table=None):
             page_end = min(total, page_start + rpp - 1)
 
         if page > 1:
-            qsql = ('SELECT * FROM (%s) AS _ LIMIT %d OFFSET %d' %
-                    (qsql.rstrip(' ;'), rpp, offset))
+            try:
+                validated_qsql = validate_and_wrap_subquery(qsql)
+                qsql = 'SELECT * FROM (%s) AS _ LIMIT %d OFFSET %d' % (
+                    validated_qsql, rpp, offset)
+            except ValueError as e:
+                error = f"Invalid query for pagination: {e}"
+                qsql = None
 
-        try:
-            cursor = dataset.query(qsql)
-        except Exception as exc:
-            error = str(exc)
-            app.logger.exception('Error in user-submitted query.')
+        if qsql:  # Only execute if qsql is valid
+            try:
+                cursor = dataset.query(qsql)
+                data = cursor.fetchmany(rpp)
+                data_description = cursor.description
+                row_count = cursor.rowcount
+            except Exception as exc:
+                error = str(exc)
+                app.logger.exception('Error in user-submitted query.')
+                cursor = None
         else:
-            data = cursor.fetchmany(rpp)
-            data_description = cursor.description
-            row_count = cursor.rowcount
+            cursor = None
 
     if data_description is not None and table:
         col_names = [r[0] for r in data_description]
@@ -388,6 +491,13 @@ def generic_query():
 def require_table(fn):
     @wraps(fn)
     def inner(table, *args, **kwargs):
+        # Validate table name to prevent injection
+        try:
+            sanitize_sql_identifier(table)
+        except ValueError:
+            app.logger.warning(f"Invalid table name attempted: {table}")
+            abort(400)
+        
         if table not in dataset.tables:
             abort(404)
         return fn(table, *args, **kwargs)
@@ -398,6 +508,14 @@ def table_create():
     table = (request.form.get('table_name') or '').strip()
     if not table:
         flash('Table name is required.', 'danger')
+        dest = request.form.get('redirect') or url_for('index')
+        dest = '/' + dest.lstrip('/')  # idiot vulnerability "researchers".
+        return redirect(dest)
+    
+    try:
+        sanitize_sql_identifier(table)
+    except ValueError:
+        flash('Invalid table name. Use only letters, numbers and underscores.', 'danger')
         dest = request.form.get('redirect') or url_for('index')
         dest = '/' + dest.lstrip('/')  # idiot vulnerability "researchers".
         return redirect(dest)
@@ -708,7 +826,7 @@ def minimal_validate_field(field, value):
     elif isinstance(field, BlobField):
         try:
             value = base64.b64decode(value)
-        except Exception as exc:
+        except Exception:
             return value, 'Value must be base64-encoded binary data.'
     try:
         field.db_value(value)
@@ -1002,17 +1120,14 @@ def table_import(table):
             # compatible with Python's CSV module. We'd need to reach pretty
             # far into Flask's internals to modify this behavior, so instead
             # we'll just translate the stream into utf8-decoded unicode.
-            if not PY2:
-                try:
-                    stream = TextIOWrapper(file_obj, encoding='utf8')
-                except AttributeError:
-                    # The SpooledTemporaryFile used by werkzeug does not
-                    # implement an API that the TextIOWrapper expects, so we'll
-                    # just consume the whole damn thing and decode it.
-                    # Fixed in werkzeug 0.15.
-                    stream = StringIO(file_obj.read().decode('utf8'))
-            else:
-                stream = file_obj.stream
+            try:
+                stream = TextIOWrapper(file_obj, encoding='utf8')
+            except AttributeError:
+                # The SpooledTemporaryFile used by werkzeug does not
+                # implement an API that the TextIOWrapper expects, so we'll
+                # just consume the whole damn thing and decode it.
+                # Fixed in werkzeug 0.15.
+                stream = StringIO(file_obj.read().decode('utf8'))
 
             try:
                 with dataset.transaction():
@@ -1049,7 +1164,7 @@ def drop_table(table):
             else:
                 model_class = dataset[table].model_class
                 model_class.drop_table()
-        except Exception as exc:
+        except Exception:
             flash('Error attempting to drop %s "%s".' % (label, table), 'danger')
             app.logger.exception('Error attempting to drop %s "%s".', label, table)
         else:
@@ -1075,7 +1190,7 @@ def encode_pk(row, pk):
     if isinstance(pk, CompositeKey):
         try:
             return ':::'.join([str(row[k]) for k in pk.field_names])
-        except Exception as exc:
+        except Exception:
             return '__uneditable__'
     return row[pk.column_name]
 
@@ -1113,7 +1228,7 @@ def value_filter(value, max_length=50):
                         value)
     return value
 
-column_re = re.compile('(.+?)\((.+)\)', re.S)
+column_re = re.compile(r'(.+?)\((.+)\)', re.S)
 column_split_re = re.compile(r'(?:[^,(]|\([^)]*\))+')
 
 def _format_create_table(sql):

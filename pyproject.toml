@@ -26,9 +26,11 @@ classifiers = [
     "Topic :: Database",
     "Topic :: Internet :: WWW/HTTP :: Dynamic Content",
 ]
-requires-python = ">=3.8"
+requires-python = ">=3.8.1"
 dependencies = [
     "flask>=2.0.0",
+    "flask-wtf>=1.0.0",
+    "flask-limiter>=3.0.0",
     "peewee>=3.15.0",
     "pygments>=2.10.0",
     "markupsafe>=2.0.0",

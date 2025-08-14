@@ -3,54 +3,100 @@
 {% block content_title %}{{ dataset.base_name }}{% endblock %}
 
 {% block content %}
-  <table class="table table-striped">
-    <tbody>
-      <tr>
-        <th>Sqlite</th>
-        <td>{{ sqlite.sqlite_version }}</td>
-      </tr>
-      <tr>
-        <th>Filename</th>
-        <td>{{ dataset.filename }}
-          {% if dataset.is_readonly %}<strong>read-only</strong>{% endif %}
-        </td>
-      </tr>
-      <tr>
-        <th>Size</th>
-        <td>{{ dataset.size_on_disk|filesizeformat }}</td>
-      </tr>
-      <tr>
-        <th>Created</th>
-        <td>{{ dataset.created.strftime('%A %B %d, %Y at %I:%M:%p') }}</td>
-      </tr>
-      <tr>
-        <th>Modified</th>
-        <td>{{ dataset.modified.strftime('%A %B %d, %Y at %I:%M:%p') }}</td>
-      </tr>
-      <tr>
-        <th>Tables</th>
-        <td>{{ dataset.tables|length }}</td>
-      </tr>
-      <tr>
-        <th>Indexes</th>
-        <td>{{ dataset.get_all_indexes()|length }}</td>
-      </tr>
-      <tr>
-        <th>Triggers</th>
-        <td>{{ dataset.get_all_triggers()|length }}</td>
-      </tr>
-      <tr>
-        <th>Views</th>
-        <td>{{ dataset.get_all_views()|length }}</td>
-      </tr>
-    </tbody>
-  </table>
-  <hr />
-  <h3>Query</h3>
-  <form action="{{ url_for('generic_query') }}" method="post" role="form">
-    <div class="form-group">
-      <textarea class="form-control" name="sql" placeholder="Execute SQL query..." style="height: 120px;"></textarea>
+  <div class="card database-info">
+    <div class="card-header">
+      <h4 class="mb-0">📊 Database Information</h4>
     </div>
-    <button class="btn btn-primary" type="submit">Execute</button>
-  </form>
+    <div class="card-body">
+      <div class="row">
+        <div class="col-md-6">
+          <table class="table table-sm">
+            <tbody>
+              <tr>
+                <th width="120">SQLite Version</th>
+                <td><span class="badge badge-primary">{{ sqlite.sqlite_version }}</span></td>
+              </tr>
+              <tr>
+                <th>File Path</th>
+                <td>
+                  <code>{{ dataset.filename }}</code>
+                  {% if dataset.is_readonly %}<span class="badge badge-warning ms-2">Read-Only</span>{% endif %}
+                </td>
+              </tr>
+              <tr>
+                <th>File Size</th>
+                <td><strong>{{ dataset.size_on_disk|filesizeformat }}</strong></td>
+              </tr>
+              <tr>
+                <th>Created</th>
+                <td>{{ dataset.created.strftime('%B %d, %Y at %I:%M %p') }}</td>
+              </tr>
+              <tr>
+                <th>Modified</th>
+                <td>{{ dataset.modified.strftime('%B %d, %Y at %I:%M %p') }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="col-md-6">
+          <div class="row text-center">
+            <div class="col-6 mb-3">
+              <div class="card bg-light">
+                <div class="card-body">
+                  <h3 class="text-primary mb-1">{{ dataset.tables|length }}</h3>
+                  <p class="mb-0 text-muted">Tables</p>
+                </div>
+              </div>
+            </div>
+            <div class="col-6 mb-3">
+              <div class="card bg-light">
+                <div class="card-body">
+                  <h3 class="text-success mb-1">{{ dataset.get_all_views()|length }}</h3>
+                  <p class="mb-0 text-muted">Views</p>
+                </div>
+              </div>
+            </div>
+            <div class="col-6">
+              <div class="card bg-light">
+                <div class="card-body">
+                  <h3 class="text-warning mb-1">{{ dataset.get_all_indexes()|length }}</h3>
+                  <p class="mb-0 text-muted">Indexes</p>
+                </div>
+              </div>
+            </div>
+            <div class="col-6">
+              <div class="card bg-light">
+                <div class="card-body">
+                  <h3 class="text-info mb-1">{{ dataset.get_all_triggers()|length }}</h3>
+                  <p class="mb-0 text-muted">Triggers</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card query-editor">
+    <div class="card-header">
+      <h4 class="mb-0">🔍 Quick Query</h4>
+    </div>
+    <div class="card-body">
+      <form action="{{ url_for('generic_query') }}" method="post" role="form">
+        <div class="form-group mb-3">
+          <label for="sql" class="form-label">SQL Query</label>
+          <textarea id="sql" class="form-control" name="sql" placeholder="SELECT * FROM your_table LIMIT 10;" style="height: 120px; font-family: monospace;"></textarea>
+        </div>
+        <div class="d-flex gap-2">
+          <button class="btn btn-primary" type="submit">
+            ▶️ Execute Query
+          </button>
+          <a href="{{ url_for('generic_query') }}" class="btn btn-outline-primary">
+            📝 Full Query Editor
+          </a>
+        </div>
+      </form>
+    </div>
+  </div>
 {% endblock %}
