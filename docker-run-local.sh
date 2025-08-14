@@ -89,7 +89,7 @@ CONTAINER_ID=$(docker run -d \
     -v "$DATA_DIR:/data" \
     -e SQLITE_DATABASE="$DATABASE" \
     --name sqlite-web-demo \
-    sqlite-web:latest)
+    fizzbuzz2/sqlite-web:latest)
 
 log_success "Container lancé avec l'ID: ${CONTAINER_ID:0:12}"
 
