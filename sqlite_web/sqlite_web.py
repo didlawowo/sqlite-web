@@ -1303,8 +1303,13 @@ def table_row_detail(table, pk):
         table_pk=table_pk)
 
 @app.route('/<table>/query/', methods=['GET', 'POST'])
-@require_table
 def table_query(table):
+    if table not in get_dataset().cached_tables():
+        # A bookmark can outlive its table, e.g. after an import from
+        # another database. Keep the sql, drop the table context.
+        if request.values.get('sql'):
+            return redirect(url_for('generic_query', sql=request.values['sql']))
+        abort(404)
     return _query_view('table_query.html', table)
 
 def export(query, export_format, table=None):

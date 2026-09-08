@@ -872,6 +872,8 @@ class TestQueryTemplates(BaseAppTestCase):
             self.assertEqual(r.status_code, 200)
             self.assertIn(b'name="explain"', r.data)
             self.assertIn(b'id="bookmark-modal"', r.data)
+            self.assertIn(b'id="import-bookmarks"', r.data)
+            self.assertIn(b'__TABLE__', r.data)
             self.assertIn(b'id="sql-image-modal"', r.data)
             self.assertIn(textarea_id, r.data)
 
@@ -886,6 +888,20 @@ class TestQueryTemplates(BaseAppTestCase):
         self.assertEqual(r.status_code, 200)
         self.assertIn(b'copy-row', r.data)
         self.assertNotIn(b'/users/row/', r.data)
+
+    def test_missing_table_query_keeps_sql(self):
+        # A bookmark can reference a dropped or foreign table. Its sql
+        # falls back to the generic query page.
+        r = self.client.get('/nope/query/', query_string={'sql': 'SELECT 1'})
+        self.assertEqual(r.status_code, 302)
+        self.assertIn('/query/?sql=SELECT', r.headers['Location'])
+        r = self.client.get('/nope/query/', query_string={'sql': 'SELECT 1'},
+                            follow_redirects=True)
+        self.assertEqual(r.status_code, 200)
+        self.assertIn(b'SELECT 1', r.data)
+
+    def test_missing_table_query_404s_without_sql(self):
+        self.assertEqual(self.client.get('/nope/query/').status_code, 404)
 
 
 class TestInsertForm(BaseAppTestCase):

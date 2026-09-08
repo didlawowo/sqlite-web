@@ -36,8 +36,26 @@ nav.primary-nav {
 #sidebar .nav > li > a {
     padding: 3px 10px;
 }
+.btn-group .dropdown-menu {
+    /* The theme drops the top border to merge a menu into its split
+       button, but our menus are offset and right-aligned. Restore the
+       Bootstrap default. */
+    border-top-width: 1px;
+}
 .create-table-menu {
     min-width: 16rem;
+}
+/* Compact menus on the query toolbar, SQL Help and Bookmarks. */
+div#bookmarks {
+    min-width: 250px;
+}
+form#query-form .dropdown-item,
+form#query-form .dropdown-item-text {
+    font-size: 0.8rem;
+    padding: 0.2rem 1rem;
+}
+form#query-form .dropdown-divider {
+    margin: 0.25rem 0;
 }
 .btn-outline-secondary {
     /* The theme's secondary is too pale for outline buttons on white. */

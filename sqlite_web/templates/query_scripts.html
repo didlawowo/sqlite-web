@@ -6,6 +6,10 @@
     Recent.initialize(sql);
 
     var bookmarks = new App.Bookmarks();
-    bookmarks.initialize();
+    bookmarks.initialize({
+      table: {{ (table or '')|tojson }},
+      queryUrl: {{ url_for('generic_query')|tojson }},
+      tableQueryUrl: {{ url_for('table_query', table='__TABLE__')|tojson }}
+    });
   });
 </script>
